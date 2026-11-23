@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "name": "שאלון דמו בהשראת Big Five",
+    "status": "DEMO - לא מאומת מחקרית",
+    "source": "נכתב לצורך פרויקט לימודי, לא מכלי מאושר",
+    "scale": {"min": 1, "max": 5}
+  },
+  "traits": ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"],
+  "items": [
+    {"id": "O1", "text": "אני נהנה לחשוב על רעיונות מופשטים.", "trait": "openness", "reverse": false},
+    {"id": "O2", "text": "אני מעדיף לא לנסות דברים חדשים.", "trait": "openness", "reverse": true},
+    {"id": "C1", "text": "אני מסיים משימות בזמן שקבעתי לעצמי.", "trait": "conscientiousness", "reverse": false},
+    {"id": "C2", "text": "אני לעתים משאיר דברים לרגע האחרון.", "trait": "conscientiousness", "reverse": true},
+    {"id": "E1", "text": "אני מרגיש בנוח להיות במרכז תשומת הלב.", "trait": "extraversion", "reverse": false},
+    {"id": "E2", "text": "אני מעדיף לבלות זמן לבד בשקט.", "trait": "extraversion", "reverse": true},
+    {"id": "A1", "text": "אני מוכן לעזור לאנשים גם כשזה לא נוח לי.", "trait": "agreeableness", "reverse": false},
+    {"id": "A2", "text": "אני לפעמים מתעקש על דעתי גם כשאחרים לא מסכימים.", "trait": "agreeableness", "reverse": true},
+    {"id": "N1", "text": "אני מרגיש לחץ בקלות במצבים לא צפויים.", "trait": "neuroticism", "reverse": false},
+    {"id": "N2", "text": "אני נשאר רגוע גם כשדברים לא הולכים כמתוכנן.", "trait": "neuroticism", "reverse": true}
+  ]
+}
