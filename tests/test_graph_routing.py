@@ -1,4 +1,4 @@
-from src.graph import MAX_REVISIONS, route_after_validation, route_review, run_session
+from src.graph import ITEMS, MAX_REVISIONS, route_after_validation, route_review, run_session
 
 
 def state(**kwargs):
@@ -16,7 +16,7 @@ def test_more_questions_continue():
 
 
 def test_all_answered_goes_to_scoring():
-    assert route_after_validation(state(question_index=10)) == "calculate_scores"
+    assert route_after_validation(state(question_index=len(ITEMS))) == "calculate_scores"
 
 
 def test_approved_goes_to_finalize():
@@ -32,13 +32,13 @@ def test_rejected_stops_at_limit():
 
 
 def test_full_session_approved_gives_report():
-    result = run_session([3] * 10 + [{"approved": True, "feedback": ""}])
+    result = run_session([3] * len(ITEMS) + [{"approved": True, "feedback": ""}])
     assert result["final_report"] is not None
     assert result["revisions"] == 0
 
 
 def test_three_rejections_give_no_report():
     rejection = {"approved": False, "feedback": "x"}
-    result = run_session([3] * 10 + [rejection] * 3)
+    result = run_session([3] * len(ITEMS) + [rejection] * 3)
     assert result["final_report"] is None
     assert result["revisions"] == MAX_REVISIONS
