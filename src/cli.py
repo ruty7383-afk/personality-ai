@@ -1,6 +1,9 @@
 import uuid
 from dotenv import load_dotenv
-
+from pathlib import Path
+from src.report import save_chart
+from dotenv import load_dotenv
+load_dotenv()
 load_dotenv()  # קורא את .env לפני שהגרף רץ
 from langgraph.types import Command
 
@@ -59,8 +62,11 @@ def main():
 
     final = graph.get_state(config).values["final_report"]
     if final:
+        Path("outputs").mkdir(exist_ok=True)
+        chart = save_chart(graph.get_state(config).values["scores"], Path("outputs/report_chart.png"))
         print("\n=== דוח סופי ===")
         print(final)
+        print(f"הגרף נשמר ב-{chart}")
     else:
         print("\nלא נוצר דוח סופי.")
 

@@ -9,7 +9,7 @@ from langsmith import evaluate  # noqa: E402
 from evaluation.evaluators import ALL_EVALUATORS  # noqa: E402
 from src.graph import run_session  # noqa: E402
 
-DATASET_NAME = "personality-ai-v2"
+DATASET_NAME = "personality-ai-v4"
 
 
 def target(inputs: dict) -> dict:
