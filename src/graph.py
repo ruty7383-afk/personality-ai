@@ -1,8 +1,19 @@
+import os
+import uuid
 from pathlib import Path
+
 from langgraph.checkpoint.memory import MemorySaver
-
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
 
+from src.llm import (
+    ask_clarification,
+    get_model,
+    phrase_question,
+    report_is_grounded,
+    write_report_text,
+)
+from src.report import LIMITS, TRAIT_HE, build_report
 from src.scoring import calculate_scores, load_questionnaire
 from src.state import TestState
 
@@ -10,18 +21,29 @@ QUESTIONNAIRE = load_questionnaire(Path(__file__).resolve().parent / "questionna
 ITEMS = QUESTIONNAIRE["items"]
 LO = QUESTIONNAIRE["meta"]["scale"]["min"]
 HI = QUESTIONNAIRE["meta"]["scale"]["max"]
+MAX_REVISIONS = 2
+
+
+def llm_enabled() -> bool:
+    """ה-LLM פעיל רק כש-LLM_MODE=google. בברירת המחדל הזרימה עובדת בלי מודל."""
+    return os.getenv("LLM_MODE", "fake") == "google"
 
 
 def present_question(state: TestState) -> dict:
-    """מציג את השאלה הנוכחית, ואם הייתה שגיאה - גם אותה."""
-    if state["validation_error"]:
-        print(f"שגיאה: {state['validation_error']}. נא לענות שוב.")
+    """מציג את השאלה הנוכחית. עם LLM - המודל מנסח, ואם הייתה שגיאה - מבקש הבהרה."""
     item = ITEMS[state["question_index"]]
-    print(f"שאלה {state['question_index'] + 1} מתוך {len(ITEMS)}: {item['text']}")
+    if llm_enabled():
+        model = get_model()
+        if state["validation_error"]:
+            text = ask_clarification(model, item["text"], str(state["pending"]), LO, HI)
+        else:
+            text = phrase_question(model, item["text"], LO, HI)
+    else:
+        text = item["text"]
+        if state["validation_error"]:
+            text = f"שגיאה: {state['validation_error']}. נא לענות שוב.\n{text}"
+    print(f"שאלה {state['question_index'] + 1} מתוך {len(ITEMS)}: {text}")
     return {}
-
-
-from langgraph.types import interrupt
 
 
 def collect_answer(state: TestState) -> dict:
@@ -29,6 +51,8 @@ def collect_answer(state: TestState) -> dict:
     item = ITEMS[state["question_index"]]
     answer = interrupt({"question": item["text"], "scale": [LO, HI]})
     return {"pending": answer}
+
+
 def validate_answer(state: TestState) -> dict:
     """בודק את התשובה הממתינה. אם תקינה - שומר אותה ומתקדם לשאלה הבאה."""
     value = state["pending"]
@@ -51,13 +75,59 @@ def route_after_validation(state: TestState) -> str:
     if state["validation_error"]:
         return "present_question"      # לולאה: שואלים שוב את אותה שאלה
     if state["question_index"] < len(ITEMS):
-        return "present_question"     # עוד שאלות: ממשיכים
-    return "calculate_scores"         # כל השאלות נענו: מחשבים ציונים
+        return "present_question"      # עוד שאלות: ממשיכים
+    return "calculate_scores"          # כל השאלות נענו: מחשבים ציונים
 
 
 def calculate(state: TestState) -> dict:
     """קורא לפונקציה מ-scoring.py. אין כאן שום חישוב משלנו."""
     return {"scores": calculate_scores(QUESTIONNAIRE, state["answers"])}
+
+
+def draft_report(scores: dict) -> str:
+    """עם LLM - המודל מנסח, ורק אם הטקסט עובר בדיקת הנאמנות לציונים. אחרת - תבנית."""
+    if llm_enabled():
+        text = write_report_text(get_model(), scores, TRAIT_HE)
+        if report_is_grounded(text, scores, TRAIT_HE):
+            return f"{text}\n{LIMITS}"
+        print("הטקסט של ה-LLM לא עבר בדיקת הנאמנות, משתמשים בתבנית.")
+    return build_report(scores)
+
+
+def generate_report(state: TestState) -> dict:
+    return {
+        "draft_report": draft_report(state["scores"]),
+        "revision_count": 0,
+        "approved": None,
+    }
+
+
+def human_review(state: TestState) -> dict:
+    """עוצר ומחכה להחלטת הבודק: {'approved': bool, 'feedback': str}."""
+    decision = interrupt({"draft": state["draft_report"], "question": "לאשר את הדוח?"})
+    return {
+        "approved": decision["approved"],
+        "review_feedback": decision.get("feedback", ""),
+    }
+
+
+def route_review(state: TestState) -> str:
+    if state["approved"]:
+        return "finalize"
+    if state["revision_count"] < MAX_REVISIONS:
+        return "revise_report"
+    return "stop"  # יציאה בטוחה: הלולאה לא נמשכת לנצח
+
+
+def revise_report(state: TestState) -> dict:
+    return {
+        "draft_report": draft_report(state["scores"]),
+        "revision_count": state["revision_count"] + 1,
+        "approved": None,
+    }
+
+def finalize(state: TestState) -> dict:
+    return {"final_report": state["draft_report"]}
 
 
 def build_graph():
@@ -87,108 +157,6 @@ def build_graph():
     builder.add_edge("revise_report", "human_review")
     builder.add_edge("finalize", END)
     return builder.compile(checkpointer=MemorySaver())
-
-
-def run_demo() -> dict:
-    """מריץ את הגרף עם תשובה לא תקינה אחת (9), ואחריה תשובות תקינות לכל השאלות."""
-    graph = build_graph()
-    inbox = [9] + [3] * len(ITEMS)
-    result = graph.invoke({
-        "question_index": 0,
-        "answers": {},
-        "inbox": inbox,
-        "pending": None,
-        "validation_error": None,
-        "scores": None,
-    })
-    return result["scores"]
-from langgraph.types import Command
-
-
-def run_demo_with_interrupts(answers: list[int]) -> dict:
-    """מריץ את הבדיקה: בכל עצירה לוקח תשובה מהרשימה וממשיך."""
-    graph = build_graph()
-    config = {"configurable": {"thread_id": "demo-1"}}
-    initial_state = {
-        "question_index": 0,
-        "answers": {},
-        "pending": None,
-        "validation_error": None,
-        "scores": None,
-    }
-
-    graph.invoke(initial_state, config)  # רץ עד העצירה הראשונה
-    while graph.get_state(config).next:  # יש עוד צומת ממתין
-        print("הגרף ממתין לתשובה...")
-        graph.invoke(Command(resume=answers.pop(0)), config)
-
-    return graph.get_state(config).values["scores"]
-
-from src.report import build_report
-
-MAX_REVISIONS = 2
-
-
-def generate_report(state: TestState) -> dict:
-    return {
-        "draft_report": build_report(state["scores"]),
-        "revision_count": 0,
-        "approved": None,
-    }
-
-
-def human_review(state: TestState) -> dict:
-    """עוצר ומחכה להחלטת הבודק: {'approved': bool, 'feedback': str}."""
-    decision = interrupt({"draft": state["draft_report"], "question": "לאשר את הדוח?"})
-    return {
-        "approved": decision["approved"],
-        "review_feedback": decision.get("feedback", ""),
-    }
-
-
-def route_review(state: TestState) -> str:
-    if state["approved"]:
-        return "finalize"
-    if state["revision_count"] < MAX_REVISIONS:
-        return "revise_report"
-    return "stop"  # יציאה בטוחה: הלולאה לא נמשכת לנצח
-
-
-def revise_report(state: TestState) -> dict:
-    # השיפור: הערת הבודק נשארת במצב הפנימי ולא נכנסת לטקסט שמוצג לנבדק
-    return {
-        "draft_report": build_report(state["scores"]),
-        "revision_count": state["revision_count"] + 1,
-        "approved": None,
-    }
-
-
-def finalize(state: TestState) -> dict:
-    return {"final_report": state["draft_report"]}
-
-# def run_full_demo(inputs: list) -> dict:
-#     """בכל עצירה לוקח את הערך הבא מהרשימה: מספר לשאלה, או החלטה לבודק."""
-#     graph = build_graph()
-#     config = {"configurable": {"thread_id": "demo-1"}}
-#     initial_state = {
-#         "question_index": 0,
-#         "answers": {},
-#         "pending": None,
-#         "validation_error": None,
-#         "scores": None,
-#         "draft_report": None,
-#         "review_feedback": None,
-#         "approved": None,
-#         "revision_count": 0,
-#         "final_report": None,
-#     }
-#     graph.invoke(initial_state(), config)
-#     while graph.get_state(config).next:
-#         graph.invoke(Command(resume=inputs.pop(0)), config)
-#     values = graph.get_state(config).values
-#     return {"final_report": values["final_report"], "scores": values["scores"]}
-
-import uuid
 
 
 def initial_state() -> dict:

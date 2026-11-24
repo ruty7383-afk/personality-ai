@@ -12,7 +12,7 @@
     {"id": "I01", "text": "אני הנשמה של המסיבה.", "text_en": "Am the life of the party.", "trait": "extraversion", "reverse": false},
     {"id": "I02", "text": "אני מרגיש מעט דאגה לאחרים.", "text_en": "Feel little concern for others.", "trait": "agreeableness", "reverse": true},
     {"id": "I03", "text": "אני תמיד מוכן.", "text_en": "Am always prepared.", "trait": "conscientiousness", "reverse": false},
-    {"id": "I04", "text": "אני מתלחץ בקלות.", "text_en": "Get stressed out easily.", "trait": "neuroticism", "reverse": false},
+    {"id": "I04", "text": "אני נלחץ בקלות.", "text_en": "Get stressed out easily.", "trait": "neuroticism", "reverse": false},
     {"id": "I05", "text": "יש לי אוצר מילים עשיר.", "text_en": "Have a rich vocabulary.", "trait": "openness", "reverse": false},
     {"id": "I06", "text": "אני לא מדבר הרבה.", "text_en": "Don't talk a lot.", "trait": "extraversion", "reverse": true},
     {"id": "I07", "text": "אני מתעניין באנשים.", "text_en": "Am interested in people.", "trait": "agreeableness", "reverse": false},
